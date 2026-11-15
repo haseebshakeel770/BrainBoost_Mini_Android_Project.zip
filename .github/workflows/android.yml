@@ -1,0 +1,54 @@
+name: Build APK
+on:
+  push:
+  workflow_dispatch:
+
+env:
+  # Unity Dashboard سے اصل IDs یہاں لکھیں (خالی = وہ ad نہیں چلے گا)
+  BANNER_ID: ""
+  INTERSTITIAL_ID: ""
+  REWARDED_ID: ""
+  # Production کے لیے false کریں
+  TEST_MODE: "true"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unzip project
+        run: |
+          ZIP=$(find . -maxdepth 1 -name "*.zip" | head -1)
+          echo "Using: $ZIP"
+          mkdir -p proj
+          unzip -q "$ZIP" -d proj
+          DIR=$(dirname "$(find proj -name settings.gradle.kts | head -1)")
+          echo "PROJECT_DIR=$DIR" >> $GITHUB_ENV
+
+      - name: Set Unity Ad Unit IDs
+        run: |
+          F=$(find "$PROJECT_DIR" -name AdsConfig.kt | head -1)
+          sed -i "s|const val BANNER = \"\"|const val BANNER = \"$BANNER_ID\"|" "$F"
+          sed -i "s|const val INTERSTITIAL = \"\"|const val INTERSTITIAL = \"$INTERSTITIAL_ID\"|" "$F"
+          sed -i "s|const val REWARDED = \"\"|const val REWARDED = \"$REWARDED_ID\"|" "$F"
+          sed -i "s|const val TEST_MODE = true|const val TEST_MODE = $TEST_MODE|" "$F"
+          grep "const val" "$F"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+
+      - name: Build APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BrainBoostMini-APK
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
